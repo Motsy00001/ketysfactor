@@ -141,7 +141,6 @@ def check_for_updates(call):
     except Exception as e:
         bot.send_message(call.message.chat.id, f"❌ Ошибка при проверке обновления: {e}")
 
-
 @bot.callback_query_handler(func=lambda call: call.data == "download_update")
 @authorized
 def download_update(call):
@@ -168,10 +167,25 @@ def download_update(call):
             f.write(new_code)
 
         bot.send_message(call.message.chat.id, "✅ Обновление установлено! Перезапуск бота...")
-        os.execv(sys.executable, ['python'] + sys.argv)
+        restart_bot()
 
     except Exception as e:
         bot.send_message(call.message.chat.id, f"❌ Ошибка при обновлении: {e}")
+#_______________________________________________________________________
+def restart_bot():
+    try:
+        bot_path = os.path.abspath(__file__)
+        pythonw_path = sys.executable.replace("python.exe", "pythonw.exe")
+        if not os.path.exists(pythonw_path):
+            pythonw_path = sys.executable
+
+        subprocess.Popen([pythonw_path, bot_path], cwd=os.path.dirname(bot_path), shell=False)
+
+        time.sleep(1)
+        os._exit(0)
+
+    except Exception as e:
+        print(f"Ошибка при перезапуске: {e}")
 #_______________________________________________________________________
 # Screenshot
 def take_screenshot() -> bytes:
