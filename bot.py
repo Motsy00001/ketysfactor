@@ -15,8 +15,11 @@ from pywinauto import Application
 from telebot.types import InlineKeyboardMarkup, InlineKeyboardButton
 shutdown_timers = {}
 waiting_for_idea = {}
-BOT_VERS = "0.5"
+BOT_VERS = "0.6"
 BOT_DEV = "@Steamtlsm"
+UPDATE_REPO = "https://raw.githubusercontent.com/motsy00001/ketysfactor/main"
+VERSION_URL = f"{UPDATE_REPO}/version.txt"
+SCRIPT_URL = f"{UPDATE_REPO}/bot.py"
 
 try:
     import telebot
@@ -98,6 +101,71 @@ def media_keyboard():
 def send_welcome(message):
     text = " "
     bot.send_message(message.chat.id, text, reply_markup=main_keyboard())
+#_______________________________________________________________________
+@bot.message_handler(func=lambda m: m.text == "🔄 Поиск обновлений")
+@authorized
+def check_for_updates(message):
+    try:
+        current_version = BOT_VERS
+        response = requests.get(VERSION_URL, timeout=10)
+
+        if response.status_code != 200:
+            bot.send_message(message.chat.id, f"❌ Не удалось проверить обновления (код {response.status_code})")
+            return
+
+        latest_version = response.text.strip()
+
+        # Проверяем, что версия — это просто число или короткий текст
+        if not latest_version or len(latest_version) > 10 or "html" in latest_version.lower():
+            bot.send_message(message.chat.id, "⚠️ Некорректный файл версии. Возможно, указан неправильный путь.")
+            return
+
+        if latest_version != current_version:
+            markup = InlineKeyboardMarkup()
+            markup.add(InlineKeyboardButton("⬇️ Скачать обновление", callback_data="download_update"))
+            bot.send_message(
+                message.chat.id,
+                f"📦 Найдена новая версия {latest_version}!\n"
+                f"Текущая: {current_version}\n\n"
+                "Хотите обновиться?",
+                reply_markup=markup
+            )
+        else:
+            bot.send_message(message.chat.id, "✅ У вас установлена последняя версия.")
+    except Exception as e:
+        bot.send_message(message.chat.id, f"❌ Ошибка при проверке обновления: {e}")
+
+
+@bot.callback_query_handler(func=lambda call: call.data == "download_update")
+@authorized
+def download_update(call):
+    try:
+        response = requests.get(SCRIPT_URL, timeout=15)
+
+        # Проверяем, что ответ — это действительно код, а не страница 404
+        if response.status_code != 200 or "html" in response.text.lower():
+            bot.send_message(call.message.chat.id, "❌ Ошибка: не удалось загрузить обновление (возможно, ссылка неверна).")
+            return
+
+        new_code = response.text
+        current_file = os.path.abspath(sys.argv[0])
+        backup_file = current_file + ".bak"
+
+        # Создаём резервную копию
+        try:
+            os.replace(current_file, backup_file)
+        except Exception:
+            pass
+
+        with open(current_file, "w", encoding="utf-8") as f:
+            f.write(new_code)
+
+        bot.send_message(call.message.chat.id, "✅ Обновление установлено!\n♻️ Перезапуск бота...")
+        os.startfile(current_file)
+        sys.exit()
+
+    except Exception as e:
+        bot.send_message(call.message.chat.id, f"❌ Ошибка при обновлении: {e}")
 #_______________________________________________________________________
 # Screenshot
 def take_screenshot() -> bytes:
