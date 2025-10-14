@@ -158,13 +158,12 @@ def download_update(call):
 
         new_code = response.text
 
-        # Проверим, не HTML ли пришёл (например, страница 404)
         if new_code.strip().startswith("<!DOCTYPE html>") or new_code.strip().startswith("<html"):
             bot.send_message(call.message.chat.id, "❌ Ошибка: GitHub вернул HTML вместо кода (скорее всего, неправильная ссылка).")
             return
 
-        with open(__file__, "w", encoding="utf-8") as f:
-            f.write(new_code)
+        with open(__file__, "wb") as f:
+            f.write(response.content)
 
         bot.send_message(call.message.chat.id, "✅ Обновление установлено! Перезапуск бота...")
         restart_bot()
