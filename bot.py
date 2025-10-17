@@ -15,7 +15,7 @@ from pywinauto import Application
 from telebot.types import InlineKeyboardMarkup, InlineKeyboardButton
 shutdown_timers = {}
 waiting_for_idea = {}
-BOT_VERS = "0.6I"
+BOT_VERS = "0.6"
 BOT_DEV = "@Steamtlsm"
 UPDATE_REPO = "https://raw.githubusercontent.com/motsy00001/ketysfactor/main"
 VERSION_URL = f"{UPDATE_REPO}/version.txt"
@@ -143,85 +143,59 @@ def check_for_updates(call):
 @authorized
 def download_update(call):
     try:
-        bot.send_message(call.message.chat.id, "⬇️ Начинаю загрузку обновления...")
+        bot.send_message(call.message.chat.id, "⬇️ Загружаю обновление...")
         
         response = requests.get(f"{BOT_FILE_URL}?t={int(time.time())}", timeout=15)
-
-        if response.status_code != 200:
-            bot.send_message(
-                call.message.chat.id,
-                f"❌ Ошибка: не удалось загрузить обновление (код {response.status_code})."
-            )
-            return
-
-        new_code = response.text
-
-        if new_code.strip().startswith("<!DOCTYPE html>") or new_code.strip().startswith("<html"):
-            bot.send_message(call.message.chat.id, "❌ Ошибка: GitHub вернул HTML вместо кода.")
-            return
-
-        # Сохраняем новый код во временный файл
-        temp_script = "temp_update.py"
-        with open(temp_script, "w", encoding="utf-8") as f:
-            f.write(new_code)
-
-        # Получаем текущую директорию
-        current_dir = os.path.dirname(os.path.abspath(__file__))
-        dist_dir = os.path.join(current_dir, "dist")
         
-        # Создаем bat-файл для обновления и перезапуска (для PyArmor 8.x)
-        bat_content = f"""@echo off
-chcp 65001 >nul
-echo ⏳ Обновление бота...
+        if response.status_code != 200:
+            bot.send_message(call.message.chat.id, "❌ Ошибка загрузки")
+            return
 
-timeout /t 3 /nobreak >nul
+        # Сохраняем обновление
+        with open("new_bot.py", "w", encoding="utf-8") as f:
+            f.write(response.text)
 
-cd /d "{current_dir}"
+        # Упрощенный bat-файл с правильными путями
+        bat_content = """@echo off
+cd /d "%~dp0"
+echo Обновление бота...
+timeout /t 2
 
-echo 🔄 Останавливаю текущего бота...
+echo Останавливаю бота...
 taskkill /f /im python.exe >nul 2>&1
-timeout /t 2 /nobreak >nul
+timeout /t 1
 
-echo 📦 Создаю новую обфусцированную версию...
-pyarmor gen -O "{dist_dir}" "{temp_script}"
+echo Удаляю старую версию...
+if exist "dist\\bot.py" del "dist\\bot.py"
 
-echo 📁 Заменяю файлы...
-if exist "{dist_dir}\\{temp_script}" (
-    if exist "{dist_dir}\\bot.py" (
-        del "{dist_dir}\\bot.py"
-    )
-    move /y "{dist_dir}\\{temp_script}" "{dist_dir}\\bot.py"
+echo Создаю новую версию...
+pyarmor gen -O dist new_bot.py
+
+echo Заменяю файл...
+if exist "dist\\new_bot.py" (
+    move /y "dist\\new_bot.py" "dist\\bot.py"
 )
 
-echo 🧹 Удаляю временные файлы...
-if exist "{temp_script}" (
-    del "{temp_script}"
-)
+echo Очистка...
+del new_bot.py
 
-echo 🚀 Запускаю обновленного бота...
-cd /d "{dist_dir}"
+echo Запуск нового бота...
+cd dist
 start pythonw.exe bot.py
 
-echo ✅ Обновление завершено!
-timeout /t 2 /nobreak >nul
 exit
 """
         
-        bat_filename = "update_bot.bat"
-        with open(bat_filename, "w", encoding="utf-8") as bat_file:
-            bat_file.write(bat_content)
+        with open("update_fixed.bat", "w") as f:
+            f.write(bat_content)
 
-        bot.send_message(call.message.chat.id, "✅ Обновление загружено! Запускаю процесс обновления...")
-        
-        # Запускаем процесс обновления
-        subprocess.Popen([bat_filename], shell=True)
-        
-        # Даем время на отправку сообщения перед выходом
-        time.sleep(2)
+        bot.send_message(call.message.chat.id, "✅ Запускаю обновление...")
+        subprocess.Popen(["update_fixed.bat"], shell=True)
+        time.sleep(3)
         os._exit(0)
 
     except Exception as e:
-        bot.send_message(call.message.chat.id, f"❌ Ошибка при обновлении: {str(e)}")
+        bot.send_message(call.message.chat.id, f"❌ Ошибка: {e}")
 #_______________________________________________________________________
 def restart_bot():
     try:
