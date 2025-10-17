@@ -163,7 +163,7 @@ def download_update(call):
         with open(bot_path, "w", encoding="utf-8") as f:
             f.write(response.text)
 
-        # Bat-файл с абсолютными путями
+        # Bat-файл с удалением исходника после обфускации
         bat_content = f'''@echo off
 cd /d "{project_root}"
 echo Обновление бота...
@@ -173,6 +173,8 @@ timeout /t 2
 if exist dist rd /s /q dist
 echo Запускаю обфускацию...
 pyarmor gen -O dist "{bot_path}"
+echo Удаляю исходный код...
+del "{bot_path}"
 cd dist
 start pythonw.exe bot.py
 '''
