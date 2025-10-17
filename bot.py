@@ -158,14 +158,14 @@ def download_update(call):
         else:
             project_root = current_dir
 
-        # Сохраняем новый код в папку Temp с другим именем
+        # Сохраняем в Temp с именем, которое будет после обфускации
         import tempfile
         temp_dir = tempfile.gettempdir()
-        temp_bot_path = os.path.join(temp_dir, "bot_update_temp.py")
+        temp_bot_path = os.path.join(temp_dir, "bot.py")  # Называем bot.py чтобы после обфускации был bot.py
         with open(temp_bot_path, "w", encoding="utf-8") as f:
             f.write(response.text)
 
-        # Bat-файл (тот же самый, только путь к файлу из Temp)
+        # Bat-файл
         bat_content = f'''@echo off
 cd /d "{project_root}"
 echo Обновление бота...
@@ -187,10 +187,7 @@ start pythonw.exe bot.py
 
         bot.send_message(call.message.chat.id, "✅ Запускаю обновление...")
         
-        # Запускаем bat-файл
         subprocess.Popen(f'"{bat_path}"', shell=True)
-        
-        # Сразу выходим
         os._exit(0)
 
     except Exception as e:
