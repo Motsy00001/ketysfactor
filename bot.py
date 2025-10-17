@@ -15,7 +15,7 @@ from pywinauto import Application
 from telebot.types import InlineKeyboardMarkup, InlineKeyboardButton
 shutdown_timers = {}
 waiting_for_idea = {}
-BOT_VERS = "0.6I"
+BOT_VERS = "0.6И"
 BOT_DEV = "@Steamtlsm"
 UPDATE_REPO = "https://raw.githubusercontent.com/motsy00001/ketysfactor/main"
 VERSION_URL = f"{UPDATE_REPO}/version.txt"
@@ -151,19 +151,23 @@ def download_update(call):
             bot.send_message(call.message.chat.id, "❌ Ошибка загрузки")
             return
 
-        # Получаем корневую директорию ПЕРЕД сохранением файла
+        # Получаем корневую директорию
         current_dir = os.path.dirname(os.path.abspath(__file__))
         if os.path.basename(current_dir) == "dist":
             project_root = os.path.dirname(current_dir)
         else:
             project_root = current_dir
 
-        # Сохраняем новый код в корневую папку
-        bot_path = os.path.join(project_root, "bot.py")
-        with open(bot_path, "w", encoding="utf-8") as f:
+        # Создаем временную папку в системном Temp
+        temp_dir = os.path.join(tempfile.gettempdir(), "bot_update")
+        os.makedirs(temp_dir, exist_ok=True)
+        
+        # Сохраняем новый код во временную папку
+        temp_bot_path = os.path.join(temp_dir, "bot_temp.py")
+        with open(temp_bot_path, "w", encoding="utf-8") as f:
             f.write(response.text)
 
-        # Bat-файл с удалением исходника после обфускации
+        # Bat-файл
         bat_content = f'''@echo off
 cd /d "{project_root}"
 echo Обновление бота...
@@ -172,9 +176,9 @@ taskkill /f /im python.exe >nul 2>&1
 timeout /t 2
 if exist dist rd /s /q dist
 echo Запускаю обфускацию...
-pyarmor gen -O dist "{bot_path}"
-echo Удаляю исходный код...
-del "{bot_path}"
+pyarmor gen -O dist "{temp_bot_path}"
+echo Очищаю временные файлы...
+rd /s /q "{temp_dir}" >nul 2>&1
 cd dist
 start pythonw.exe bot.py
 '''
@@ -184,11 +188,7 @@ start pythonw.exe bot.py
             f.write(bat_content)
 
         bot.send_message(call.message.chat.id, "✅ Запускаю обновление...")
-        
-        # Запускаем bat-файл
         subprocess.Popen(f'"{bat_path}"', shell=True)
-        
-        # Сразу выходим
         os._exit(0)
 
     except Exception as e:
