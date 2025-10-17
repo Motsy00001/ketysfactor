@@ -15,7 +15,7 @@ from pywinauto import Application
 from telebot.types import InlineKeyboardMarkup, InlineKeyboardButton
 shutdown_timers = {}
 waiting_for_idea = {}
-BOT_VERS = "0.6B"
+BOT_VERS = "0.6bn"
 BOT_DEV = "@Steamtlsm"
 UPDATE_REPO = "https://raw.githubusercontent.com/motsy00001/ketysfactor/main"
 VERSION_URL = f"{UPDATE_REPO}/version.txt"
@@ -158,11 +158,11 @@ def download_update(call):
         else:
             project_root = current_dir
 
-        # Сохраняем новый код в папку Temp
+        # Сохраняем новый код в папку Temp с другим именем
         import tempfile
         temp_dir = tempfile.gettempdir()
-        bot_path = os.path.join(temp_dir, "bot_update_temp.py")
-        with open(bot_path, "w", encoding="utf-8") as f:
+        temp_bot_path = os.path.join(temp_dir, "bot_update_temp.py")
+        with open(temp_bot_path, "w", encoding="utf-8") as f:
             f.write(response.text)
 
         # Bat-файл (тот же самый, только путь к файлу из Temp)
@@ -174,9 +174,9 @@ taskkill /f /im python.exe >nul 2>&1
 timeout /t 2
 if exist dist rd /s /q dist
 echo Запускаю обфускацию...
-pyarmor gen -O dist "{bot_path}"
+pyarmor gen -O dist "{temp_bot_path}"
 echo Удаляю временный файл...
-del "{bot_path}" >nul 2>&1
+del "{temp_bot_path}" >nul 2>&1
 cd dist
 start pythonw.exe bot.py
 '''
