@@ -143,59 +143,89 @@ def check_for_updates(call):
 @authorized
 def download_update(call):
     try:
-        bot.send_message(call.message.chat.id, "⬇️ Загружаю обновление...")
+        bot.send_message(call.message.chat.id, "⬇️ Начинаю загрузку обновления...")
         
         response = requests.get(f"{BOT_FILE_URL}?t={int(time.time())}", timeout=15)
-        
+
         if response.status_code != 200:
-            bot.send_message(call.message.chat.id, "❌ Ошибка загрузки")
+            bot.send_message(
+                call.message.chat.id,
+                f"❌ Ошибка: не удалось загрузить обновление (код {response.status_code})."
+            )
             return
 
-        # Сохраняем обновление
-        with open("new_bot.py", "w", encoding="utf-8") as f:
-            f.write(response.text)
+        new_code = response.text
 
-        # Упрощенный bat-файл с правильными путями
-        bat_content = """@echo off
-cd /d "%~dp0"
-echo Обновление бота...
-timeout /t 2
+        if new_code.strip().startswith("<!DOCTYPE html>") or new_code.strip().startswith("<html"):
+            bot.send_message(call.message.chat.id, "❌ Ошибка: GitHub вернул HTML вместо кода.")
+            return
 
-echo Останавливаю бота...
+        # Сохраняем новый код во временный файл
+        temp_script = "temp_update.py"
+        with open(temp_script, "w", encoding="utf-8") as f:
+            f.write(new_code)
+
+        # Получаем корневую директорию проекта
+        current_dir = os.path.dirname(os.path.abspath(__file__))
+        
+        # Если мы уже в папке dist, поднимаемся на уровень выше
+        if os.path.basename(current_dir) == "dist":
+            project_root = os.path.dirname(current_dir)
+        else:
+            project_root = current_dir
+
+        # Создаем bat-файл для обновления и перезапуска
+        bat_content = f"""@echo off
+chcp 65001 >nul
+echo ⏳ Обновление бота...
+
+cd /d "{project_root}"
+
+echo 🔄 Останавливаю текущего бота...
 taskkill /f /im python.exe >nul 2>&1
-timeout /t 1
+timeout /t 2 /nobreak >nul
 
-echo Удаляю старую версию...
-if exist "dist\\bot.py" del "dist\\bot.py"
-
-echo Создаю новую версию...
-pyarmor gen -O dist new_bot.py
-
-echo Заменяю файл...
-if exist "dist\\new_bot.py" (
-    move /y "dist\\new_bot.py" "dist\\bot.py"
+echo 🗑️ Очищаю старую версию...
+if exist "dist" (
+    rd /s /q "dist"
 )
 
-echo Очистка...
-del new_bot.py
+echo 📦 Создаю новую обфусцированную версию...
+pyarmor gen -O "dist" "{temp_script}"
 
-echo Запуск нового бота...
+echo 📁 Переименовываю файл...
+if exist "dist\\{temp_script}" (
+    move /y "dist\\{temp_script}" "dist\\bot.py"
+)
+
+echo 🧹 Удаляю временные файлы...
+if exist "{temp_script}" (
+    del "{temp_script}"
+)
+
+echo 🚀 Запускаю обновленного бота...
 cd dist
 start pythonw.exe bot.py
 
+echo ✅ Обновление завершено!
 exit
 """
         
-        with open("update_fixed.bat", "w") as f:
-            f.write(bat_content)
+        bat_filename = "update_bot.bat"
+        with open(bat_filename, "w", encoding="utf-8") as bat_file:
+            bat_file.write(bat_content)
 
-        bot.send_message(call.message.chat.id, "✅ Запускаю обновление...")
-        subprocess.Popen(["update_fixed.bat"], shell=True)
-        time.sleep(3)
+        bot.send_message(call.message.chat.id, "✅ Обновление загружено! Запускаю процесс обновления...")
+        
+        # Запускаем процесс обновления
+        subprocess.Popen([bat_filename], shell=True, cwd=project_root)
+        
+        # Даем время на отправку сообщения перед выходом
+        time.sleep(2)
         os._exit(0)
 
     except Exception as e:
-        bot.send_message(call.message.chat.id, f"❌ Ошибка: {e}")
+        bot.send_message(call.message.chat.id, f"❌ Ошибка при обновлении: {str(e)}")
 #_______________________________________________________________________
 def restart_bot():
     try:
