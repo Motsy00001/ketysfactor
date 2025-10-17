@@ -15,7 +15,7 @@ from pywinauto import Application
 from telebot.types import InlineKeyboardMarkup, InlineKeyboardButton
 shutdown_timers = {}
 waiting_for_idea = {}
-BOT_VERS = "0.6I"
+BOT_VERS = "0.6"
 BOT_DEV = "@Steamtlsm"
 UPDATE_REPO = "https://raw.githubusercontent.com/motsy00001/ketysfactor/main"
 VERSION_URL = f"{UPDATE_REPO}/version.txt"
