@@ -15,11 +15,13 @@ from pywinauto import Application
 from telebot.types import InlineKeyboardMarkup, InlineKeyboardButton
 shutdown_timers = {}
 waiting_for_idea = {}
-BOT_VERS = "0.6"
+BOT_VERS = "0.6I"
 BOT_DEV = "@Steamtlsm"
 UPDATE_REPO = "https://raw.githubusercontent.com/motsy00001/ketysfactor/main"
 VERSION_URL = f"{UPDATE_REPO}/version.txt"
-SCRIPT_URL = f"{UPDATE_REPO}/bot.py"
+BOT_FILE_URL = f"{UPDATE_REPO}/bot.py"
+BOT_EDDIT = "• Авто-обновление бота\n• Оптимизирован код" #_В_новой_версии
+BOT_EDDIT1 = "• Авто-обновление бота\n• Оптимизирован код" #В_старой_версии
 
 try:
     import telebot
@@ -102,70 +104,152 @@ def send_welcome(message):
     text = " "
     bot.send_message(message.chat.id, text, reply_markup=main_keyboard())
 #_______________________________________________________________________
-@bot.message_handler(func=lambda m: m.text == "🔄 Поиск обновлений")
+@bot.callback_query_handler(func=lambda call: call.data == "find_update")
 @authorized
-def check_for_updates(message):
+def check_for_updates(call):
     try:
-        current_version = BOT_VERS
+        current_version = BOT_VERS.strip()
         response = requests.get(VERSION_URL, timeout=10)
 
         if response.status_code != 200:
-            bot.send_message(message.chat.id, f"❌ Не удалось проверить обновления (код {response.status_code})")
+            bot.send_message(call.message.chat.id, f"❌ Не удалось проверить обновления (код {response.status_code})")
             return
 
-        latest_version = response.text.strip()
+        latest_version = response.text.strip().replace('\n', '').replace('\r', '')
 
-        # Проверяем, что версия — это просто число или короткий текст
         if not latest_version or len(latest_version) > 10 or "html" in latest_version.lower():
-            bot.send_message(message.chat.id, "⚠️ Некорректный файл версии. Возможно, указан неправильный путь.")
+            bot.send_message(call.message.chat.id, "⚠️ Некорректный файл версии. Возможно, указан неправильный путь.")
             return
+
+        print(f"[DEBUG] Текущая версия: {current_version}, последняя: {latest_version}")
 
         if latest_version != current_version:
             markup = InlineKeyboardMarkup()
-            markup.add(InlineKeyboardButton("⬇️ Скачать обновление", callback_data="download_update"))
+            markup.add(InlineKeyboardButton("⬇️ Установить обновление", callback_data="download_update"))
             bot.send_message(
-                message.chat.id,
-                f"📦 Найдена новая версия {latest_version}!\n"
-                f"Текущая: {current_version}\n\n"
+                call.message.chat.id,
+                f"📦 Найдена новая версия v{latest_version}!\n"
+                f"Текущая: v{current_version}\n\n"
                 "Хотите обновиться?",
                 reply_markup=markup
             )
         else:
-            bot.send_message(message.chat.id, "✅ У вас установлена последняя версия.")
-    except Exception as e:
-        bot.send_message(message.chat.id, f"❌ Ошибка при проверке обновления: {e}")
+            bot.send_message(call.message.chat.id, "✅ У вас установлена последняя версия.")
 
+    except Exception as e:
+        bot.send_message(call.message.chat.id, f"❌ Ошибка при проверке обновления: {e}")
 
 @bot.callback_query_handler(func=lambda call: call.data == "download_update")
 @authorized
 def download_update(call):
     try:
-        response = requests.get(SCRIPT_URL, timeout=15)
+        bot.send_message(call.message.chat.id, "⬇️ Начинаю загрузку обновления...")
+        
+        response = requests.get(f"{BOT_FILE_URL}?t={int(time.time())}", timeout=15)
 
-        # Проверяем, что ответ — это действительно код, а не страница 404
-        if response.status_code != 200 or "html" in response.text.lower():
-            bot.send_message(call.message.chat.id, "❌ Ошибка: не удалось загрузить обновление (возможно, ссылка неверна).")
+        if response.status_code != 200:
+            bot.send_message(
+                call.message.chat.id,
+                f"❌ Ошибка: не удалось загрузить обновление (код {response.status_code})."
+            )
             return
 
         new_code = response.text
-        current_file = os.path.abspath(sys.argv[0])
-        backup_file = current_file + ".bak"
 
-        # Создаём резервную копию
-        try:
-            os.replace(current_file, backup_file)
-        except Exception:
-            pass
+        if new_code.strip().startswith("<!DOCTYPE html>") or new_code.strip().startswith("<html"):
+            bot.send_message(call.message.chat.id, "❌ Ошибка: GitHub вернул HTML вместо кода.")
+            return
 
-        with open(current_file, "w", encoding="utf-8") as f:
+        # Сохраняем новый код во временный файл
+        temp_script = "temp_update.py"
+        with open(temp_script, "w", encoding="utf-8") as f:
             f.write(new_code)
 
-        bot.send_message(call.message.chat.id, "✅ Обновление установлено!\n♻️ Перезапуск бота...")
-        os.startfile(current_file)
-        sys.exit()
+        # Получаем текущую директорию
+        current_dir = os.path.dirname(os.path.abspath(__file__))
+        dist_dir = os.path.join(current_dir, "dist")
+        
+        # Создаем bat-файл для обновления и перезапуска (для PyArmor 8.x)
+        bat_content = f"""@echo off
+chcp 65001 >nul
+echo ⏳ Обновление бота...
+
+timeout /t 3 /nobreak >nul
+
+cd /d "{current_dir}"
+
+echo 🔄 Останавливаю текущего бота...
+taskkill /f /im python.exe >nul 2>&1
+timeout /t 2 /nobreak >nul
+
+echo 📦 Создаю новую обфусцированную версию...
+pyarmor gen -O "{dist_dir}" "{temp_script}"
+
+echo 📁 Заменяю файлы...
+if exist "{dist_dir}\\{temp_script}" (
+    if exist "{dist_dir}\\bot.py" (
+        del "{dist_dir}\\bot.py"
+    )
+    move /y "{dist_dir}\\{temp_script}" "{dist_dir}\\bot.py"
+)
+
+echo 🧹 Удаляю временные файлы...
+if exist "{temp_script}" (
+    del "{temp_script}"
+)
+
+echo 🚀 Запускаю обновленного бота...
+cd /d "{dist_dir}"
+start pythonw.exe bot.py
+
+echo ✅ Обновление завершено!
+timeout /t 2 /nobreak >nul
+exit
+"""
+        
+        bat_filename = "update_bot.bat"
+        with open(bat_filename, "w", encoding="utf-8") as bat_file:
+            bat_file.write(bat_content)
+
+        bot.send_message(call.message.chat.id, "✅ Обновление загружено! Запускаю процесс обновления...")
+        
+        # Запускаем процесс обновления
+        subprocess.Popen([bat_filename], shell=True)
+        
+        # Даем время на отправку сообщения перед выходом
+        time.sleep(2)
+        os._exit(0)
 
     except Exception as e:
-        bot.send_message(call.message.chat.id, f"❌ Ошибка при обновлении: {e}")
+        bot.send_message(call.message.chat.id, f"❌ Ошибка при обновлении: {str(e)}")
+#_______________________________________________________________________
+def restart_bot():
+    try:
+        # Определяем путь к обфусцированной версии
+        current_dir = os.path.dirname(os.path.abspath(__file__))
+        dist_bot_path = os.path.join(current_dir, "dist", "bot.py")
+        
+        # Если есть обфусцированная версия - запускаем её
+        if os.path.exists(dist_bot_path):
+            os.chdir(os.path.join(current_dir, "dist"))
+            pythonw_path = sys.executable.replace("python.exe", "pythonw.exe")
+            if not os.path.exists(pythonw_path):
+                pythonw_path = sys.executable
+                
+            subprocess.Popen([pythonw_path, "bot.py"], shell=False)
+        else:
+            # Иначе запускаем текущую версию
+            pythonw_path = sys.executable.replace("python.exe", "pythonw.exe")
+            if not os.path.exists(pythonw_path):
+                pythonw_path = sys.executable
+                
+            subprocess.Popen([pythonw_path, __file__], shell=False)
+
+        time.sleep(1)
+        os._exit(0)
+
+    except Exception as e:
+        print(f"Ошибка при перезапуске: {e}")
 #_______________________________________________________________________
 # Screenshot
 def take_screenshot() -> bytes:
@@ -285,13 +369,13 @@ def callback_handler(call):
     elif call.data == "shutdown_timer":
         markup = InlineKeyboardMarkup()
         markup.add(
-            InlineKeyboardButton("0.5 часа", callback_data="timer_0.5"),
+            InlineKeyboardButton("30 минут", callback_data="timer_0.5"),
             InlineKeyboardButton("1 час", callback_data="timer_1"),
             InlineKeyboardButton("2 часа", callback_data="timer_2"),
             InlineKeyboardButton("3 часа", callback_data="timer_3"),
             InlineKeyboardButton("4 часа", callback_data="timer_4")
         )
-        msg = bot.send_message(call.message.chat.id, "⏱ Выберите таймер или введи своё значение в часах/минутах:", reply_markup=markup)
+        msg = bot.send_message(call.message.chat.id, "⏱ Выберите таймер или введи своё значение в минутах, например: 15m — ставит таймер на 15 минут.", reply_markup=markup)
         bot.register_next_step_handler(msg, shutdown_timer_input)
 
     elif call.data.startswith("timer_"):
@@ -408,74 +492,6 @@ def toggle_play_pause():
     except Exception as e:
         logger.exception("Ошибка при нажатии на пробел")
         return False
-
-"""def toggle_play_pause():
-    try:
-        import pygetwindow as gw
-        import pyautogui
-        import time
-        from pywinauto import Application
-
-        video_keywords = [
-            "YouTube", "RuTube", "Premier", "Okko", "ВКонтакте", "VK Видео", "VK Play",
-            "КиноПоиск", "Kinopoisk", "IVI", "Start", "Smotrim", "Megogo"
-        ]
-        browser_keywords = ["Chrome", "Yandex", "Яндекс", "Edge", "Opera", "Brave", "Firefox"]
-
-        all_windows = gw.getAllWindows()
-
-        target_window = None
-        is_video_tab = False
-
-        # Сначала пробуем найти окно, где именно открыто видео
-        for win in all_windows:
-            title = win.title or ""
-            if any(vk.lower() in title.lower() for vk in video_keywords):
-                target_window = win
-                is_video_tab = True
-                break
-
-        if not target_window:
-            for win in all_windows:
-                title = win.title or ""
-                if any(bk.lower() in title.lower() for bk in browser_keywords):
-                    target_window = win
-                    is_video_tab = False
-                    break
-
-        if not target_window:
-            logger.warning("❌ Не найдено окно браузера с видео")
-            return False
-
-        try:
-            if target_window.isMinimized:
-                target_window.restore()
-        except Exception:
-            pass
-
-        try:
-            target_window.activate()
-        except Exception:
-            try:
-                app = Application().connect(handle=target_window._hWnd)
-                app.top_window().set_focus()
-            except Exception:
-                pass
-
-        time.sleep(0.3)
-
-        if is_video_tab:
-            pyautogui.press('space')
-            logger.info("✅ Видео поставлено на паузу/возобновлено")
-            return True
-        else:
-            logger.warning("⚠️ Видео-вкладка неактивна — пробел не нажимаем")
-            return "no_video_tab"
-
-    except Exception as e:
-        logger.exception("Ошибка при паузе/возобновлении видео")
-        return False
-"""
 #_______________________________________________________________________
 def toggle_vpered():
     try:
@@ -536,17 +552,15 @@ def echo_all(message):
     elif text in ['🧩 информация об обновлении']:
         markup = InlineKeyboardMarkup()
         markup.add(
-            InlineKeyboardButton("💡 Предложить идею для обновления", callback_data="update_backmessage"),
+            InlineKeyboardButton("🔄 Проверка обновлений", callback_data="find_update"),
+            InlineKeyboardButton("💡 Предложить идею для обновления", callback_data="update_backmessage")
         )
 
         bot.send_message(
             message.chat.id,
             "🧩 *Информация об обновлении*\n\n"
-            f"🔸 Версия: v{BOT_VERS}\n"
-            "• Добавил: Кнопка для предложений идей для обновлений\n"
-            "• Добавил: Перенес кнопки упр. видео в отдельное меню\n"
-            "• Добавил: Перемотка видео\n"
-            "• Оптимизирован код\n\n"
+            f"🔸 Добавленно в версии: v{BOT_VERS}\n"
+            f"{BOT_EDDIT1}\n\n"
             "📅 Дата написания бота: 2025\n"
             f"👨‍💻 Разработал: {BOT_DEV}",
             parse_mode="Markdown",
