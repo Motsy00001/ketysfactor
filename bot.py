@@ -138,106 +138,59 @@ def check_for_updates(call):
 
     except Exception as e:
         bot.send_message(call.message.chat.id, f"❌ Ошибка при проверке обновления: {e}")
-
+#_______________________________________________________________________
 @bot.callback_query_handler(func=lambda call: call.data == "download_update")
 @authorized
 def download_update(call):
     try:
-        bot.send_message(call.message.chat.id, "⬇️ Начинаю загрузку обновления...")
+        bot.send_message(call.message.chat.id, "⬇️ Загружаю обновление...")
         
         response = requests.get(f"{BOT_FILE_URL}?t={int(time.time())}", timeout=15)
-
+        
         if response.status_code != 200:
-            bot.send_message(call.message.chat.id, f"❌ Ошибка загрузки (код {response.status_code})")
+            bot.send_message(call.message.chat.id, "❌ Ошибка загрузки")
             return
 
-        new_code = response.text
-
-        if new_code.strip().startswith("<!DOCTYPE html>"):
-            bot.send_message(call.message.chat.id, "❌ GitHub вернул HTML вместо кода")
-            return
-
-        # Сохраняем новый код
-        with open("new_bot.py", "w", encoding="utf-8") as f:
-            f.write(new_code)
-
-        # Получаем корневую директорию
+        # Получаем корневую директорию ПЕРЕД сохранением файла
         current_dir = os.path.dirname(os.path.abspath(__file__))
         if os.path.basename(current_dir) == "dist":
             project_root = os.path.dirname(current_dir)
         else:
             project_root = current_dir
 
-        # Bat-файл с логированием
+        # Сохраняем новый код в корневую папку
+        bot_path = os.path.join(project_root, "bot.py")
+        with open(bot_path, "w", encoding="utf-8") as f:
+            f.write(response.text)
+
+        # Bat-файл с абсолютными путями
         bat_content = f'''@echo off
 cd /d "{project_root}"
-echo [1] Начало обновления > update_log.txt
-
-echo [2] Останавливаю бота... >> update_log.txt
-taskkill /f /im python.exe >> update_log.txt 2>&1
-timeout /t 3 >> update_log.txt
-
-echo [3] Удаляю старую папку dist... >> update_log.txt
-if exist dist (
-    rd /s /q dist >> update_log.txt 2>&1
-)
-
-echo [4] Создаю новую обфусцированную версию... >> update_log.txt
-pyarmor gen -O dist new_bot.py >> update_log.txt 2>&1
-
-echo [5] Проверяю результат... >> update_log.txt
-if exist "dist\\new_bot.py" (
-    echo [6] Файл найден, переименовываю... >> update_log.txt
-    move /y "dist\\new_bot.py" "dist\\bot.py" >> update_log.txt 2>&1
-) else (
-    echo [6] ОШИБКА: файл не создан! >> update_log.txt
-    dir dist >> update_log.txt 2>&1
-    pause
-    exit 1
-)
-
-echo [7] Удаляю временные файлы... >> update_log.txt
-del new_bot.py >> update_log.txt 2>&1
-
-echo [8] Запускаю нового бота... >> update_log.txt
-cd dist
-start pythonw.exe bot.py >> update_log.txt 2>&1
-
-echo [9] Обновление завершено! >> update_log.txt
+echo Обновление бота...
 timeout /t 2
-exit
+taskkill /f /im python.exe >nul 2>&1
+timeout /t 2
+if exist dist rd /s /q dist
+echo Запускаю обфускацию...
+pyarmor gen -O dist "{bot_path}"
+cd dist
+start pythonw.exe bot.py
 '''
 
-        bat_path = os.path.join(project_root, "update_debug.bat")
-        with open(bat_path, "w", encoding="utf-8") as f:
+        bat_path = os.path.join(project_root, "update.bat")
+        with open(bat_path, "w") as f:
             f.write(bat_content)
 
-        bot.send_message(call.message.chat.id, "✅ Обновление загружено! Запускаю процесс...")
+        bot.send_message(call.message.chat.id, "✅ Запускаю обновление...")
         
-        # Запускаем и ждем завершения
-        process = subprocess.Popen([bat_path], shell=True, cwd=project_root)
+        # Запускаем bat-файл
+        subprocess.Popen(f'"{bat_path}"', shell=True)
         
-        # Ждем немного и проверяем
-        time.sleep(5)
-        
-        # Проверяем лог
-        log_path = os.path.join(project_root, "update_log.txt")
-        if os.path.exists(log_path):
-            with open(log_path, "r", encoding="utf-8") as f:
-                log_content = f.read()
-            print("Лог обновления:", log_content)
-            
-            if "Обновление завершено" in log_content:
-                bot.send_message(call.message.chat.id, "✅ Обновление успешно установлено!")
-            else:
-                bot.send_message(call.message.chat.id, f"⚠️ Обновление запущено, но есть ошибки. Проверь лог: {log_path}")
-        else:
-            bot.send_message(call.message.chat.id, "❌ Лог не создан, bat-файл не запустился")
-
+        # Сразу выходим
         os._exit(0)
 
     except Exception as e:
-        bot.send_message(call.message.chat.id, f"❌ Ошибка: {str(e)}")
+        bot.send_message(call.message.chat.id, f"❌ Ошибка: {e}")
 #_______________________________________________________________________
 def restart_bot():
     try:
